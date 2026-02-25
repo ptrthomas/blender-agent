@@ -2,6 +2,8 @@
 
 Run Python in Blender via HTTP POST. No MCP, no protocol, no dependencies — just `curl`.
 
+Targets **Blender 5.0+** only.
+
 ## Setup
 
 Symlink into Blender's extensions directory (one-time):
@@ -16,6 +18,23 @@ Then in Blender: **Edit → Preferences → Add-ons** → enable "Blender Agent"
 The symlink means edits to `blender_agent/__init__.py` are live — just restart Blender to pick up changes.
 
 In the 3D Viewport sidebar → **Blender Agent** tab → click **Start**.
+
+### CLI launch (auto-start server)
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
+```
+
+This opens Blender and starts the HTTP server automatically — no need to click Start in the UI.
+
+Disable the splash screen once (persists across restarts):
+
+```bash
+curl -s localhost:5656 -d '
+bpy.context.preferences.view.show_splash = False
+bpy.ops.wm.save_userpref()
+'
+```
 
 ## Usage
 
