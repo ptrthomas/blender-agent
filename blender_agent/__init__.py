@@ -89,7 +89,8 @@ class Handler(BaseHTTPRequestHandler):
             return None  # don't re-register timer
 
         bpy.app.timers.register(run_in_main, first_interval=0.0)
-        event.wait(timeout=30)
+        timeout = int(self.headers.get("X-Timeout", 600))
+        event.wait(timeout=timeout)
 
         if not event.is_set():
             self._reply(504, {"ok": False, "error": "timeout waiting for Blender main thread"})

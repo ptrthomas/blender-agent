@@ -91,6 +91,7 @@ Target **Blender 5.0+** only. No backwards compatibility needed.
 - Strip creation: `strips.new_effect()`, `strips.new_movie()`, etc. (not `sequences.new_effect()`)
 - TRANSFORM is no longer a valid effect strip type — use `strip.transform` property instead
 - Strip types renamed: classes like `TextSequence` → `TextStrip` in RNA
+- **Video render**: must set `image_settings.media_type = 'VIDEO'` before `file_format = 'FFMPEG'`
 
 ## Known Blender 5.0.1 bugs
 

@@ -223,6 +223,8 @@ bpy.ops.render.render(write_still=True)
 ### Render animation (video)
 ```python
 scene.render.filepath = "/tmp/output.mp4"
+# Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
+scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'
 scene.render.ffmpeg.format = 'MPEG4'
 scene.render.ffmpeg.codec = 'H264'

@@ -150,10 +150,24 @@ scene.frame_set(1)
 bpy.ops.render.render(write_still=True)
 ```
 
-### Render animation
+### Render animation (image sequence)
 ```python
 scene.render.filepath = "/tmp/anim/frame_"
 scene.render.image_settings.file_format = 'PNG'
+bpy.ops.render.render(animation=True)
+```
+
+### Render animation (H.264 video)
+```python
+scene.render.filepath = "/tmp/output.mp4"
+# Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
+scene.render.image_settings.media_type = 'VIDEO'
+scene.render.image_settings.file_format = 'FFMPEG'
+scene.render.ffmpeg.format = 'MPEG4'
+scene.render.ffmpeg.codec = 'H264'
+scene.render.ffmpeg.constant_rate_factor = 'MEDIUM'
+scene.render.ffmpeg.ffmpeg_preset = 'GOOD'
+scene.render.ffmpeg.audio_codec = 'NONE'
 bpy.ops.render.render(animation=True)
 ```
 
