@@ -273,6 +273,31 @@ for i, (start_sec, end_sec, text) in enumerate(subs):
     s.box_margin = 0.01
 ```
 
+## Switching to Video Editing workspace
+
+The Video Editing workspace can be loaded from Blender's built-in template:
+```python
+template_path = "/Applications/Blender.app/Contents/Resources/5.0/scripts/startup/bl_app_templates_system/Video_Editing/startup.blend"
+bpy.ops.workspace.append_activate(idname="Video Editing", filepath=template_path)
+bpy.context.window.workspace = bpy.data.workspaces["Video Editing"]
+```
+
+**Important**: The template's sequencer areas don't auto-link to the current scene's strips.
+In Blender 5.0, each workspace has its own `sequencer_scene` (separate from `window.scene`).
+Must be set with a timer delay after the workspace switch:
+```python
+template_path = "/Applications/Blender.app/Contents/Resources/5.0/scripts/startup/bl_app_templates_system/Video_Editing/startup.blend"
+bpy.ops.workspace.append_activate(idname="Video Editing", filepath=template_path)
+bpy.context.window.workspace = bpy.data.workspaces["Video Editing"]
+
+# Delayed — workspace needs a frame to initialize before sequencer_scene can be set
+def fix_scene():
+    bpy.context.workspace.sequencer_scene = bpy.data.scenes["Scene"]
+    bpy.context.scene.frame_set(40)  # set to desired frame
+    return None
+bpy.app.timers.register(fix_scene, first_interval=0.3)
+```
+
 ## Known issues (Blender 5.0.1)
 
 - **Strip modifiers crash**: `strip.modifiers.new()` segfaults. Avoid until patched.
