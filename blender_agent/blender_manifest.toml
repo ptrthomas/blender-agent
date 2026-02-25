@@ -1,0 +1,9 @@
+schema_version = "1.0.0"
+id = "blender_agent"
+version = "0.1.0"
+name = "Blender Agent"
+tagline = "Run Python via HTTP POST"
+maintainer = "Peter"
+type = "add-on"
+license = ["SPDX:MIT"]
+blender_version_min = "4.2.0"
