@@ -93,6 +93,16 @@ Target **Blender 5.0+** only. No backwards compatibility needed.
 - Strip types renamed: classes like `TextSequence` → `TextStrip` in RNA
 - **Video render**: must set `image_settings.media_type = 'VIDEO'` before `file_format = 'FFMPEG'`
 
+## Blender API documentation
+
+When working on skills or hitting unfamiliar API, search the web. Key docs:
+- Python API: https://docs.blender.org/api/5.0/
+- Release notes (API changes): https://developer.blender.org/docs/release_notes/5.0/python_api/
+- VSE changes: https://developer.blender.org/docs/release_notes/5.0/sequencer/
+- Manual: https://docs.blender.org/manual/en/latest/video_editing/
+
+Blender 5.0 revamped the VSE significantly — old StackOverflow answers and tutorials may use outdated API.
+
 ## Known Blender 5.0.1 bugs
 
 - **Strip modifiers crash**: calling `strip.modifiers.new()` causes a segfault in `rna_Strip_modifier_new`. Avoid until fixed.
