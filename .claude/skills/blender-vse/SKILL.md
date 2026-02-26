@@ -1,3 +1,8 @@
+---
+name: blender-vse
+description: Drive Blender's Video Sequence Editor to create and edit video timelines, add strips (text, color, movie, image, sound, effects), transitions, keyframe animations, and render video output. Use when the user mentions video editing, VSE, sequences, timelines, subtitles, text overlays, or video rendering in Blender.
+---
+
 # Blender VSE — Video Sequence Editor Skill
 
 Drive Blender's Video Sequence Editor via HTTP POST to `localhost:5656`.
@@ -213,7 +218,7 @@ se.channels[1].lock = False
 
 ### Render single frame (PNG)
 ```python
-scene.render.filepath = "/tmp/frame.png"
+scene.render.filepath = "output/temp/frame.png"
 scene.render.image_settings.file_format = 'PNG'
 scene.render.resolution_percentage = 100
 scene.frame_set(30)
@@ -222,7 +227,7 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (video)
 ```python
-scene.render.filepath = "/tmp/output.mp4"
+scene.render.filepath = "output/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'

@@ -43,21 +43,21 @@ curl -s localhost:5656 -d 'bpy.app.version_string'
 
 Take a screenshot of the Blender UI and read it to see what's happening:
 ```bash
-curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="/tmp/blender_ui.png")'
+curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="output/temp/blender_ui.png")'
 ```
-Then use the Read tool on `/tmp/blender_ui.png` to inspect the result visually.
+Then use the Read tool on `output/temp/blender_ui.png` to inspect the result visually.
 
 For rendered frames (3D or VSE output), render to a file and read it:
 ```bash
 curl -s localhost:5656 -d '
 scene = bpy.context.scene
-scene.render.filepath = "/tmp/blender_render.png"
+scene.render.filepath = "output/temp/blender_render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
 '
 ```
-Then read `/tmp/blender_render.png`.
+Then read `output/temp/blender_render.png`.
 
 Use this feedback loop when iterating: make changes, screenshot/render, inspect, adjust.
 
@@ -65,13 +65,22 @@ Use this feedback loop when iterating: make changes, screenshot/render, inspect,
 
 macOS crash dumps: `~/Library/Logs/DiagnosticReports/Blender-*.ips`
 
+## Output directory
+
+All render output goes to the gitignored `output/` directory:
+- `output/temp/` — test renders, screenshots, intermediate files
+- `output/<filename>` — final artifacts (videos, images)
+
+Never render to `/tmp`. Always use project-relative `output/` paths.
+
 ## Project structure
 
 ```
 blender_agent/__init__.py    # The Blender addon (HTTP server + exec engine)
 blender_agent/blender_manifest.toml
 start_server.py              # Auto-start script for CLI launch
-.claude/commands/             # Claude Code skills for Blender workflows
+output/                      # Render output (gitignored)
+.claude/skills/              # Agent Skills (auto-loaded by Claude when relevant)
 ```
 
 ## Reference code
@@ -85,25 +94,14 @@ start_server.py              # Auto-start script for CLI launch
 
 Target **Blender 5.0+** only. No backwards compatibility needed.
 
-### Key API differences in Blender 5.0
+The skills in `.claude/skills/` contain the correct Blender 5.0 API usage. Always follow the patterns in skills rather than relying on training data, which is mostly pre-5.0. When you hit an API error, fix it and update the relevant skill so it stays accurate.
 
-- Sequence editor strips: `scene.sequence_editor.strips` (not `.sequences`)
-- Strip creation: `strips.new_effect()`, `strips.new_movie()`, etc. (not `sequences.new_effect()`)
-- TRANSFORM is no longer a valid effect strip type — use `strip.transform` property instead
-- Strip types renamed: classes like `TextSequence` → `TextStrip` in RNA
-- **Video render**: must set `image_settings.media_type = 'VIDEO'` before `file_format = 'FFMPEG'`
-
-## Blender API documentation
-
-When working on skills or hitting unfamiliar API, search the web. Key docs:
+If stuck, search the web. Key docs:
 - Python API: https://docs.blender.org/api/5.0/
 - Release notes (API changes): https://developer.blender.org/docs/release_notes/5.0/python_api/
 - VSE changes: https://developer.blender.org/docs/release_notes/5.0/sequencer/
-- Manual: https://docs.blender.org/manual/en/latest/video_editing/
-
-Blender 5.0 revamped the VSE significantly — old StackOverflow answers and tutorials may use outdated API.
 
 ## Known Blender 5.0.1 bugs
 
-- **Strip modifiers crash**: calling `strip.modifiers.new()` causes a segfault in `rna_Strip_modifier_new`. Avoid until fixed.
-- **Render can crash**: rendering with certain threading configurations can segfault in `libIlmThread`. Use `resolution_percentage = 50` or lower for safety during testing.
+- **Strip modifiers crash**: `strip.modifiers.new()` segfaults. Avoid until fixed.
+- **Render can crash**: threading segfault in `libIlmThread`. Use `resolution_percentage = 50` for test renders.

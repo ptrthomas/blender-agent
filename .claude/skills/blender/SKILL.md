@@ -1,3 +1,8 @@
+---
+name: blender
+description: Drive Blender via HTTP by sending Python code to localhost:5656. Use when the user wants to automate Blender, inspect scenes, take screenshots, or perform general Blender operations. For video editing (VSE) or 3D scene manipulation, the specialized blender-vse and blender-3d skills provide deeper guidance.
+---
+
 # Blender — Main Skill
 
 You can drive Blender by sending Python code via HTTP POST to `localhost:5656`.
@@ -32,32 +37,27 @@ PYEOF
 2. If not running, start Blender: `/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &`
 3. Inspect current scene state before making changes
 
-## Sub-skills
-
-- `/project:blender-vse` — Video Sequence Editor: timelines, strips, text overlays, rendering video
-- `/project:blender-3d` — 3D scene manipulation: objects, materials, animation, rendering stills
-
 ## Visual feedback loop
 
 Screenshot the Blender UI:
 ```bash
-curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="/tmp/blender_ui.png")'
+curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="output/temp/blender_ui.png")'
 ```
-Then `Read /tmp/blender_ui.png` to see the full UI state.
+Then `Read output/temp/blender_ui.png` to see the full UI state.
 
 Render a frame and inspect:
 ```bash
 curl -s localhost:5656 -d '
 scene = bpy.context.scene
-scene.render.filepath = "/tmp/blender_render.png"
+scene.render.filepath = "output/temp/blender_render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
 '
 ```
-Then `Read /tmp/blender_render.png` to see the output.
+Then `Read output/temp/blender_render.png` to see the output.
 
-Use this for iterating: change → screenshot/render → inspect → adjust.
+Use this for iterating: change -> screenshot/render -> inspect -> adjust.
 
 ## Common patterns
 

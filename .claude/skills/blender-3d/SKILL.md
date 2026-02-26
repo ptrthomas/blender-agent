@@ -1,3 +1,8 @@
+---
+name: blender-3d
+description: Manipulate Blender 3D scenes including creating objects, materials, cameras, lights, animations with keyframes, and rendering stills or video. Use when the user wants to create or modify 3D objects, set up materials, animate scenes, configure cameras or lighting, or render 3D output in Blender.
+---
+
 # Blender 3D — Scene Manipulation Skill
 
 Drive Blender's 3D scene via HTTP POST to `localhost:5656`.
@@ -142,7 +147,7 @@ for fcurve in action.fcurves:
 ### Render still
 ```python
 scene = bpy.context.scene
-scene.render.filepath = "/tmp/render.png"
+scene.render.filepath = "output/temp/render.png"
 scene.render.image_settings.file_format = 'PNG'
 scene.render.resolution_percentage = 100
 scene.render.use_sequencer = False   # render 3D scene, not VSE
@@ -152,14 +157,14 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (image sequence)
 ```python
-scene.render.filepath = "/tmp/anim/frame_"
+scene.render.filepath = "output/temp/frame_"
 scene.render.image_settings.file_format = 'PNG'
 bpy.ops.render.render(animation=True)
 ```
 
 ### Render animation (H.264 video)
 ```python
-scene.render.filepath = "/tmp/output.mp4"
+scene.render.filepath = "output/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'
@@ -173,8 +178,9 @@ bpy.ops.render.render(animation=True)
 
 ### Render engine
 ```python
-scene.render.engine = 'EEVEE'       # fast preview
-# scene.render.engine = 'CYCLES'    # high quality (slow)
+scene.render.engine = 'BLENDER_EEVEE'    # fast preview
+# scene.render.engine = 'CYCLES'         # high quality (slow)
+# scene.render.engine = 'BLENDER_WORKBENCH'  # solid/flat shading
 ```
 
 ## World / background
