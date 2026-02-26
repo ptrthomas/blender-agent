@@ -119,6 +119,38 @@ If stuck, search the web. Key docs:
 - Release notes (API changes): https://developer.blender.org/docs/release_notes/5.0/python_api/
 - VSE changes: https://developer.blender.org/docs/release_notes/5.0/sequencer/
 
+## Skill usability test
+
+When asked to test a skill (e.g. "test the geometry nodes skill"), launch a background sub-agent
+that builds something non-trivial using only the skill documentation. This validates that the
+skills are accurate, complete, and usable by an agent without prior knowledge.
+
+### How to run
+
+1. **Pick a test project** appropriate to the skill being tested. It should exercise multiple
+   sections of the skill (not just the basics). Example test projects:
+   - `blender-3d`: animated scene with materials, lighting, camera, and rendered output
+   - `blender-vse`: multi-strip timeline with text, transitions, and video render
+   - `blender-geometry-nodes`: procedural scene with instancing, keyframed inputs, and render
+
+2. **Launch a background sub-agent** (Task tool, `run_in_background: true`) with instructions to:
+   - Read the relevant skill files from `.claude/skills/`
+   - Verify Blender is running
+   - Build the project step by step, checking for errors after each command
+   - Render a test frame and report the path
+   - Report: what it built, any skill docs that were confusing/wrong/missing, errors hit and how resolved
+
+3. **Monitor progress** by tailing the agent's output file (returned in the Task result).
+   Check in at milestones if the user wants visibility.
+
+4. **Review the result**: inspect the rendered output, then fix any skill documentation bugs
+   the sub-agent identified. Commit fixes if warranted.
+
+### What the sub-agent should NOT do
+
+- Modify any project files (skills, CLAUDE.md, code) — only send commands to Blender
+- Use knowledge outside the skill files — the test validates the docs, not the agent's training data
+
 ## Known Blender 5.0.1 bugs
 
 - **Strip modifiers crash**: `strip.modifiers.new()` segfaults. Avoid until fixed.

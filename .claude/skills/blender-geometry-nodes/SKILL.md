@@ -367,7 +367,7 @@ def audio_rms_per_frame(wav_path, fps, frame_count):
     nch = wf.getnchannels()
     sw = wf.getsampwidth()
     samples_per_frame = sr // fps
-    fmt = {1: 'b', 2: '<h', 4: '<i'}[sw]
+    fmt = {1: 'b', 2: 'h', 4: 'i'}[sw]
     max_val = float(2 ** (8 * sw - 1))
     rms_values = []
     for _ in range(frame_count):
@@ -376,7 +376,7 @@ def audio_rms_per_frame(wav_path, fps, frame_count):
             rms_values.append(0.0)
             continue
         count = len(raw) // sw
-        samples = struct.unpack(f'{count}{fmt}', raw)
+        samples = struct.unpack(f'<{count}{fmt}', raw)
         # Average channels if stereo
         mono = [samples[i] for i in range(0, count, nch)]
         rms = math.sqrt(sum(s * s for s in mono) / max(len(mono), 1)) / max_val
