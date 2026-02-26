@@ -28,6 +28,34 @@ Response: `{"ok": true, "result": ..., "output": "..."}` or `{"ok": false, "erro
 This opens Blender and auto-starts the HTTP server on port 5656.
 Splash screen is disabled via user preferences (`view.show_splash = False`).
 
+### Opening an existing scene
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender /path/to/scene.blend --python start_server.py &
+```
+
+Or if Blender is already running with the server, open a file via code:
+```bash
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+bpy.ops.wm.open_mainfile(filepath="/path/to/scene.blend")
+PYEOF
+```
+
+If the user already has Blender open without the server, they can start it from the
+3D Viewport sidebar (press `N` > Agent tab > Start).
+
+## Connecting to an existing scene
+
+Before starting work, always check if Blender is already running:
+
+1. `curl -s localhost:5656` — if it responds, the server is up
+2. Inspect what's already there: `bpy.data.objects.keys()`
+3. **Never assume a clean scene.** Don't delete objects or clear data unless the user
+   asks for a fresh start. The user may have an in-progress scene they want help with.
+
+If the server is not running, ask the user whether they want to start fresh or have
+a scene they'd like to open.
+
 ## Restarting Blender
 
 ```bash
