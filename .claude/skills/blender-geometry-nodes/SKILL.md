@@ -250,6 +250,24 @@ Note: Object, Material, and Collection references on nodes like Object Info, Set
 and Collection Info are set via `node.inputs["Name"].default_value = reference`. These
 also appear on the modifier panel in the UI.
 
+### Hiding instance source objects
+
+When using Object Info to instance an object, the source is still visible in the scene.
+Hide it from render without affecting the instances — the Object Info node reads geometry
+data regardless of the source object's visibility:
+```python
+source_obj.hide_render = True
+source_obj.hide_viewport = True
+
+# Optional: organize into a hidden collection
+col = bpy.data.collections.new("Instances")
+bpy.context.scene.collection.children.link(col)
+col.hide_render = True
+col.objects.link(source_obj)
+# Unlink from its current collection
+bpy.context.scene.collection.objects.unlink(source_obj)
+```
+
 ## Keyframing geometry node inputs
 
 Animate modifier inputs using the object's `keyframe_insert`:
