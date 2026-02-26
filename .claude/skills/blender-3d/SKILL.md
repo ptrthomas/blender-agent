@@ -201,6 +201,169 @@ Rendering is expensive — minimize render calls and use the cheapest method tha
 
 Batch multiple changes before rendering. Don't render after every tweak.
 
+## Drivers
+
+Drivers let a property be computed from an expression referencing other properties.
+Use them to link audio data, custom properties, or objects together without keyframing every target.
+
+```python
+# Add a driver to any animatable property
+# Returns an FCurve-like object (FCurve for single value, list for vectors)
+drv = light.data.driver_add("energy")
+
+# Add a variable that reads from another object/property
+var = drv.driver.variables.new()
+var.name = "kick"
+var.targets[0].id = source_obj               # object to read from
+var.targets[0].data_path = '["kick"]'        # property path on that object
+
+# Expression using the variable
+drv.driver.expression = "kick * 2000"
+```
+
+### Common driver targets
+```python
+# Custom property on an object
+var.targets[0].data_path = '["my_prop"]'
+
+# Object transform
+var.targets[0].data_path = 'location.z'
+
+# Modifier input (geometry nodes)
+var.targets[0].data_path = 'modifiers["GeometryNodes"]["Socket_2"]'
+
+# Material node input
+var.targets[0].id_type = 'MATERIAL'
+var.targets[0].id = bpy.data.materials["MyMat"]
+var.targets[0].data_path = 'node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value'
+```
+
+### Driving material properties
+```python
+mat = bpy.data.materials["GlowMat"]
+bsdf = mat.node_tree.nodes["Principled BSDF"]
+
+# Drive emission strength
+drv = bsdf.inputs["Emission Strength"].driver_add("default_value")
+var = drv.driver.variables.new()
+var.name = "val"
+var.targets[0].id = source_obj
+var.targets[0].data_path = '["audio_level"]'
+drv.driver.expression = "val * 10"
+```
+
+### Removing a driver
+```python
+light.data.driver_remove("energy")
+bsdf.inputs["Emission Strength"].driver_remove("default_value")
+```
+
+### Baking drivers to keyframes
+
+Drivers are computed on-the-fly and don't appear as editable F-curves. Bake them
+to keyframes so the user can see and tweak the curves in the Graph Editor:
+```python
+def bake_driver(obj, data_path, frame_start, frame_end):
+    """Evaluate a driven property per frame and bake to keyframes."""
+    for frame in range(frame_start, frame_end + 1):
+        bpy.context.scene.frame_set(frame)
+        # Read the current (driver-evaluated) value
+        val = obj.path_resolve(data_path)
+        # Remove driver, set keyframe, re-add driver would lose it —
+        # instead, bake to a custom property and keyframe that
+        obj[f"_baked_{data_path}"] = val
+        obj.keyframe_insert(data_path=f'["_baked_{data_path}"]', frame=frame)
+
+# Or bake and replace the driver with direct keyframes:
+def bake_and_replace_driver(target, data_path, frame_start, frame_end):
+    """Replace a driver with baked keyframes for user editing."""
+    scene = bpy.context.scene
+    values = []
+    for frame in range(frame_start, frame_end + 1):
+        scene.frame_set(frame)
+        values.append(target.path_resolve(data_path))
+    # Remove the driver
+    target.driver_remove(data_path)
+    # Keyframe the actual values
+    for i, frame in enumerate(range(frame_start, frame_end + 1)):
+        exec(f"target.{data_path} = {values[i]}")
+        target.keyframe_insert(data_path=data_path, frame=frame)
+```
+
+Offer to bake drivers when the user wants to hand-tweak animation curves.
+Baked keyframes are editable in the Graph Editor; drivers are not.
+
+## Volumetric fog / smoke
+
+### EEVEE volumetric settings
+```python
+scene = bpy.context.scene
+scene.eevee.use_volumetric_shadows = True
+scene.eevee.volumetric_samples = 64
+scene.eevee.volumetric_tile_size = '8'   # STRING enum: '1','2','4','8','16'
+scene.eevee.volumetric_start = 0.1
+scene.eevee.volumetric_end = 60.0
+```
+
+**Gotcha**: `volumetric_tile_size` is a string enum, not an int. Use `'8'` not `8`.
+
+### Fog volume cube
+```python
+# Create a cube that fills the scene
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 4))
+fog = bpy.context.active_object
+fog.name = "FogVolume"
+fog.scale = (20, 20, 10)
+
+# Volume material — connects to Volume output, NOT Surface
+fog_mat = bpy.data.materials.new("FogMat")
+fog_mat.use_nodes = True
+nodes = fog_mat.node_tree.nodes
+links = fog_mat.node_tree.links
+
+for n in list(nodes):
+    nodes.remove(n)
+
+mat_out = nodes.new("ShaderNodeOutputMaterial")
+vol = nodes.new("ShaderNodeVolumePrincipled")
+vol.inputs["Density"].default_value = 0.03       # thin haze
+vol.inputs["Anisotropy"].default_value = 0.6      # forward scattering (makes beams visible)
+links.new(mat_out.inputs["Volume"], vol.outputs["Volume"])
+
+# Noise texture for smoke-like variation
+noise = nodes.new("ShaderNodeTexNoise")
+noise.inputs["Scale"].default_value = 2.0
+noise.inputs["Detail"].default_value = 8.0
+
+multiply = nodes.new("ShaderNodeMath")
+multiply.operation = 'MULTIPLY'
+multiply.inputs[1].default_value = 0.05
+links.new(multiply.inputs[0], noise.outputs["Fac"])
+links.new(vol.inputs["Density"], multiply.outputs[0])
+
+fog.data.materials.append(fog_mat)
+```
+
+## Spot lights
+
+```python
+bpy.ops.object.light_add(type='SPOT', location=(5, -5, 3))
+spot = bpy.context.active_object
+spot.data.energy = 5000
+spot.data.color = (1.0, 0.05, 0.02)       # red
+spot.data.spot_size = 0.14                 # cone angle in radians (~8°)
+spot.data.spot_blend = 0.05                # 0 = hard edge, 1 = fully soft
+spot.data.shadow_soft_size = 0.01          # sharp shadows
+
+# Aim at a target
+track = spot.constraints.new(type='TRACK_TO')
+track.target = bpy.data.objects["Target"]
+track.track_axis = 'TRACK_NEGATIVE_Z'
+track.up_axis = 'UP_Y'
+```
+
+Spot lights create visible beams through volumetric fog (see Volumetric section above).
+
 ## Compositor (bloom / post-processing)
 
 In Blender 5.0, bloom is NOT an EEVEE setting (`use_bloom` was removed).
