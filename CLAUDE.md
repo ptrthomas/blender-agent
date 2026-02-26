@@ -93,6 +93,10 @@ blender_agent/blender_manifest.toml
 start_server.py              # Auto-start script for CLI launch
 output/                      # Render output (gitignored)
 .claude/skills/              # Agent Skills (auto-loaded by Claude when relevant)
+  blender/                   # General Blender automation
+  blender-3d/                # 3D scenes, materials, animation, rendering
+  blender-vse/               # Video Sequence Editor
+  blender-geometry-nodes/    # Geometry Nodes (procedural geometry, instancing)
 ```
 
 ## Reference code

@@ -51,6 +51,7 @@ This is the primary use case. The repo includes [Agent Skills](https://docs.anth
 | `blender` | General Blender automation, screenshots, scene inspection |
 | `blender-3d` | 3D objects, materials, cameras, lights, animation, rendering |
 | `blender-vse` | Video editing, timelines, text overlays, transitions |
+| `blender-geometry-nodes` | Geometry nodes, procedural geometry, instancing, scatter |
 
 Skills are auto-loaded — just ask Claude what you want:
 
