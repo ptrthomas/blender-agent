@@ -373,58 +373,129 @@ tree.links.new(next_node.inputs["Geometry"], repeat_out.outputs["Geometry"])
 ## Music-driven animation
 
 Blender's `sound_bake` operator requires a Graph Editor context and is unreliable via script.
-Use Python's stdlib `wave` + `struct` to read audio data directly:
+Use Python's `wave` + numpy (bundled with Blender) for full frequency analysis.
+
+### Simple RMS (overall loudness)
 
 ```python
-import wave, struct, math
+import wave, numpy as np
 
 def audio_rms_per_frame(wav_path, fps, frame_count):
-    """Read a WAV file and return RMS amplitude per frame."""
+    """Overall RMS amplitude per frame."""
     wf = wave.open(wav_path, 'rb')
-    sr = wf.getframerate()
-    nch = wf.getnchannels()
-    sw = wf.getsampwidth()
-    samples_per_frame = sr // fps
-    fmt = {1: 'b', 2: 'h', 4: 'i'}[sw]
-    max_val = float(2 ** (8 * sw - 1))
-    rms_values = []
-    for _ in range(frame_count):
-        raw = wf.readframes(samples_per_frame)
-        if not raw:
-            rms_values.append(0.0)
-            continue
-        count = len(raw) // sw
-        samples = struct.unpack(f'<{count}{fmt}', raw)
-        # Average channels if stereo
-        mono = [samples[i] for i in range(0, count, nch)]
-        rms = math.sqrt(sum(s * s for s in mono) / max(len(mono), 1)) / max_val
-        rms_values.append(rms)
+    sr, nch, sw = wf.getframerate(), wf.getnchannels(), wf.getsampwidth()
+    raw = wf.readframes(wf.getnframes())
     wf.close()
-    return rms_values
-
-# Bake to keyframes on a custom property
-import bpy
-obj = bpy.data.objects["GeoNodes"]
-scene = bpy.context.scene
-
-rms = audio_rms_per_frame("/path/to/audio.wav", scene.render.fps, scene.frame_end)
-for frame, val in enumerate(rms, start=1):
-    obj["audio_level"] = val
-    obj.keyframe_insert(data_path='["audio_level"]', frame=frame)
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float64)
+    if nch == 2:
+        audio = audio.reshape(-1, 2).mean(axis=1)
+    audio /= 32768.0
+    spf = sr // fps
+    return [float(np.sqrt(np.mean(audio[i*spf:(i+1)*spf]**2)))
+            if (i+1)*spf <= len(audio) else 0.0
+            for i in range(frame_count)]
 ```
 
-### Drive modifier input from custom property
+### Frequency band extraction (kick, snare, hi-hat)
+
+Use numpy FFT to isolate specific frequency ranges per frame:
+```python
+import wave, numpy as np
+
+def audio_band_per_frame(wav_path, fps, frame_count, low_hz, high_hz):
+    """Extract amplitude in a frequency band per frame using FFT."""
+    wf = wave.open(wav_path, 'rb')
+    sr, nch, sw = wf.getframerate(), wf.getnchannels(), wf.getsampwidth()
+    raw = wf.readframes(wf.getnframes())
+    wf.close()
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float64)
+    if nch == 2:
+        audio = audio.reshape(-1, 2).mean(axis=1)
+    audio /= 32768.0
+    spf = sr // fps
+    values = []
+    for i in range(frame_count):
+        chunk = audio[i*spf:(i+1)*spf]
+        if len(chunk) < spf:
+            values.append(0.0)
+            continue
+        fft = np.fft.rfft(chunk)
+        freqs = np.fft.rfftfreq(len(chunk), 1.0/sr)
+        mask = (freqs >= low_hz) & (freqs <= high_hz)
+        values.append(float(np.mean(np.abs(fft[mask]))) if mask.any() else 0.0)
+    # Normalize to 0-1
+    mx = max(values) if values else 1.0
+    return [v / mx if mx > 0 else 0.0 for v in values]
+```
+
+#### Useful frequency bands
+
+| Band | Range | Typical use |
+|------|-------|-------------|
+| Sub bass / kick | 20–150 Hz | Pulse geometry scale, flash lights |
+| Bass / low-mid | 150–400 Hz | Bassline response |
+| Mid | 400–2000 Hz | Vocals, snare body |
+| High-mid | 2000–6000 Hz | Snare crack, presence |
+| Treble / hi-hat | 6000–16000 Hz | Sparkle, particle effects |
+
+#### Bake multiple bands to custom properties
+```python
+import bpy
+obj = bpy.data.objects["Visualizer"]
+scene = bpy.context.scene
+wav = "/path/to/audio.wav"
+fc = scene.frame_end
+
+kick  = audio_band_per_frame(wav, scene.render.fps, fc, 20, 150)
+snare = audio_band_per_frame(wav, scene.render.fps, fc, 2000, 6000)
+hihat = audio_band_per_frame(wav, scene.render.fps, fc, 6000, 16000)
+
+for frame in range(fc):
+    f = frame + 1
+    obj["kick"]  = kick[frame]
+    obj["snare"] = snare[frame]
+    obj["hihat"] = hihat[frame]
+    obj.keyframe_insert(data_path='["kick"]',  frame=f)
+    obj.keyframe_insert(data_path='["snare"]', frame=f)
+    obj.keyframe_insert(data_path='["hihat"]', frame=f)
+
+# Set linear interpolation for snappy response
+action = obj.animation_data.action
+for fc in action.fcurves:
+    for kp in fc.keyframe_points:
+        kp.interpolation = 'LINEAR'
+```
+
+### Drive properties from audio
 
 ```python
+# Drive a geometry nodes modifier input
 mod = obj.modifiers["GeometryNodes"]
-
-# Add a driver to a geometry nodes input
 drv = obj.driver_add(f'modifiers["GeometryNodes"]["Socket_2"]')
 var = drv.driver.variables.new()
-var.name = "audio"
+var.name = "kick"
 var.targets[0].id = obj
-var.targets[0].data_path = '["audio_level"]'
-drv.driver.expression = "audio * 5.0"  # scale to taste
+var.targets[0].data_path = '["kick"]'
+drv.driver.expression = "kick * 5.0"
+
+# Drive light energy from kick drum
+light = bpy.data.lights["SpotLight"]
+drv = light.driver_add("energy")
+var = drv.driver.variables.new()
+var.name = "kick"
+var.targets[0].id = obj
+var.targets[0].data_path = '["kick"]'
+drv.driver.expression = "kick * 2000"
+
+# Drive emission strength on a material
+mat = bpy.data.materials["GlowMat"]
+bsdf = mat.node_tree.nodes["Principled BSDF"]
+drv = bsdf.inputs["Emission Strength"].driver_add("default_value")
+var = drv.driver.variables.new()
+var.name = "hihat"
+var.targets[0].id = obj
+var.targets[0].data_path = '["hihat"]'
+drv.driver.expression = "hihat * 10"
 ```
 
 ## Fast iteration tips
