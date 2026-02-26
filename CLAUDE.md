@@ -4,9 +4,14 @@ Drive Blender via HTTP POST to `localhost:5656`. The addon runs Python code in B
 
 ## How to send commands
 
+Always use heredoc to avoid shell quoting issues with Python code:
 ```bash
-curl -s localhost:5656 -d 'bpy.data.objects.keys()'
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+bpy.data.objects.keys()
+PYEOF
 ```
+
+Use `<<'PYEOF'` (quoted delimiter) so the shell doesn't expand `$variables` or backticks.
 
 Response: `{"ok": true, "result": ..., "output": "..."}` or `{"ok": false, "error": "..."}`
 
@@ -27,7 +32,7 @@ Splash screen is disabled via user preferences (`view.show_splash = False`).
 
 ```bash
 # Graceful quit (if server is responding)
-curl -s localhost:5656 -d 'bpy.ops.wm.quit_blender()' || true
+curl -s localhost:5656 --data-binary @- <<< 'bpy.ops.wm.quit_blender()' || true
 sleep 1
 # Force kill if still running
 pkill -x Blender 2>/dev/null || true
@@ -36,28 +41,33 @@ sleep 1
 /Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
 sleep 5
 # Verify
-curl -s localhost:5656 -d 'bpy.app.version_string'
+curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
 ```
 
 ## Screenshots (visual feedback)
 
+A `SESSION` variable is automatically injected into every code execution. It points to
+the current session's output directory (e.g. `output/2026-02-26-1430`). Use it for all output.
+
 Take a screenshot of the Blender UI and read it to see what's happening:
 ```bash
-curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="output/temp/blender_ui.png")'
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
+PYEOF
 ```
-Then use the Read tool on `output/temp/blender_ui.png` to inspect the result visually.
+Then use the Read tool on the screenshot path to inspect the result visually.
 
 For rendered frames (3D or VSE output), render to a file and read it:
 ```bash
-curl -s localhost:5656 -d '
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
 scene = bpy.context.scene
-scene.render.filepath = "output/temp/blender_render.png"
+scene.render.filepath = f"{SESSION}/render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
-'
+PYEOF
 ```
-Then read `output/temp/blender_render.png`.
+Then read the rendered image.
 
 Use this feedback loop when iterating: make changes, screenshot/render, inspect, adjust.
 
@@ -67,11 +77,13 @@ macOS crash dumps: `~/Library/Logs/DiagnosticReports/Blender-*.ips`
 
 ## Output directory
 
-All render output goes to the gitignored `output/` directory:
-- `output/temp/` — test renders, screenshots, intermediate files
-- `output/<filename>` — final artifacts (videos, images)
+All render output goes to the gitignored `output/` directory, organized by session.
 
-Never render to `/tmp`. Always use project-relative `output/` paths.
+Each Blender start creates a timestamped session directory: `output/YYYY-MM-DD-HHMM/`.
+The `SESSION` variable (available in all code sent to Blender) points to it. Use
+`f"{SESSION}/filename.png"` for all output paths. Previous sessions are preserved.
+
+Never render to `/tmp`. Always use `SESSION` paths.
 
 ## Project structure
 
@@ -94,7 +106,9 @@ output/                      # Render output (gitignored)
 
 Target **Blender 5.0+** only. No backwards compatibility needed.
 
-The skills in `.claude/skills/` contain the correct Blender 5.0 API usage. Always follow the patterns in skills rather than relying on training data, which is mostly pre-5.0. When you hit an API error, fix it and update the relevant skill so it stays accurate.
+The skills in `.claude/skills/` are the source of truth for Blender 5.0 API usage. Always follow the patterns in skills rather than relying on training data, which is mostly pre-5.0. When you hit an API error, fix it and update the relevant skill so it stays accurate.
+
+**Do not use auto-memory for Blender API knowledge.** All API patterns, gotchas, and learnings must go into the skill files so they ship with the project. Memory files are not distributed with the skills.
 
 If stuck, search the web. Key docs:
 - Python API: https://docs.blender.org/api/5.0/

@@ -9,20 +9,25 @@ You can drive Blender by sending Python code via HTTP POST to `localhost:5656`.
 
 ## Sending commands
 
-Use curl from Bash:
+Always use heredoc to avoid shell quoting issues with Python code:
 ```bash
-curl -s localhost:5656 -d '<python code here>'
-```
-
-For multi-line scripts, use a heredoc:
-```bash
-curl -s localhost:5656 -d @- <<'PYEOF'
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
 import bpy
 scene = bpy.context.scene
 # ... your code ...
 result_expression
 PYEOF
 ```
+
+For simple one-expression queries, heredoc still works fine:
+```bash
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+bpy.data.objects.keys()
+PYEOF
+```
+
+**Important**: Always use `<<'PYEOF'` (quoted delimiter) so the shell doesn't
+expand `$variables` or backticks inside the Python code.
 
 ## Response format
 
@@ -33,31 +38,57 @@ PYEOF
 
 ## Before starting work
 
-1. Verify the server is running: `curl -s localhost:5656 -d 'bpy.app.version_string'`
+1. Verify the server is running: `curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'`
 2. If not running, start Blender: `/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &`
 3. Inspect current scene state before making changes
+
+## Session output directory
+
+A `SESSION` variable is automatically available in every code execution. It holds the
+path to the current session's output directory (e.g. `output/2026-02-26-1430`).
+Use it for all file output — screenshots, renders, exports:
+
+```python
+f"{SESSION}/screenshot.png"
+f"{SESSION}/render.mp4"
+```
+
+Each Blender restart creates a new session directory, so previous output is never overwritten.
 
 ## Visual feedback loop
 
 Screenshot the Blender UI:
 ```bash
-curl -s localhost:5656 -d 'bpy.ops.screen.screenshot(filepath="output/temp/blender_ui.png")'
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
+PYEOF
 ```
-Then `Read output/temp/blender_ui.png` to see the full UI state.
+Then read the screenshot file to see the full UI state.
 
 Render a frame and inspect:
 ```bash
-curl -s localhost:5656 -d '
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
 scene = bpy.context.scene
-scene.render.filepath = "output/temp/blender_render.png"
+scene.render.filepath = f"{SESSION}/render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
-'
+PYEOF
 ```
-Then `Read output/temp/blender_render.png` to see the output.
+Then read the rendered image to see the output.
 
 Use this for iterating: change -> screenshot/render -> inspect -> adjust.
+
+### Fast iteration
+
+Rendering is slow. Minimize render calls and use the lowest quality that answers your question:
+
+- **Layout/positioning** — use screenshots (`bpy.ops.screen.screenshot`), no render needed
+- **Quick composition check** — `resolution_percentage = 25` and `BLENDER_WORKBENCH` engine
+- **Lighting/materials check** — `resolution_percentage = 25` with EEVEE
+- **Final output** — full resolution, intended engine
+
+Only increase quality once the scene is right. Don't render after every small change — batch adjustments and render once to verify.
 
 ## Common patterns
 
@@ -72,12 +103,19 @@ obj = bpy.data.objects["Cube"]
 {"location": list(obj.location), "rotation": list(obj.rotation_euler), "scale": list(obj.scale)}
 ```
 
+### Check session path
+```bash
+curl -s localhost:5656
+```
+Returns `{"ok": true, "session": "output/2026-02-26-1430"}`.
+
 ### Error recovery
 If Blender crashes (connection refused), restart with:
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
 sleep 5
-curl -s localhost:5656 -d 'bpy.app.version_string'
+curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
 ```
+Note: restarting creates a new session directory.
 
 Check crash dumps at `~/Library/Logs/DiagnosticReports/Blender-*.ips`

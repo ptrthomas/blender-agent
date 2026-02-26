@@ -5,8 +5,13 @@ description: Drive Blender's Video Sequence Editor to create and edit video time
 
 # Blender VSE — Video Sequence Editor Skill
 
-Drive Blender's Video Sequence Editor via HTTP POST to `localhost:5656`.
-All code runs as Blender Python (`bpy`). Target: **Blender 5.0+**.
+Python API reference for Blender 5.0+ Video Sequence Editor. Send all code via:
+```bash
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+<python code>
+PYEOF
+```
+See the main `blender` skill for full communication details, visual feedback, and error recovery.
 
 ## Setup
 
@@ -218,7 +223,9 @@ se.channels[1].lock = False
 
 ### Render single frame (PNG)
 ```python
-scene.render.filepath = "output/temp/frame.png"
+scene.render.filepath = f"{SESSION}/frame.png"
+# If previously set to FFMPEG, must reset media_type before changing format
+scene.render.image_settings.media_type = 'IMAGE'
 scene.render.image_settings.file_format = 'PNG'
 scene.render.resolution_percentage = 100
 scene.frame_set(30)
@@ -227,7 +234,7 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (video)
 ```python
-scene.render.filepath = "output/render.mp4"
+scene.render.filepath = f"{SESSION}/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'
@@ -244,6 +251,16 @@ To render VSE output instead of 3D scene, set the sequencer as the render source
 ```python
 scene.render.use_sequencer = True
 ```
+
+### Fast iteration
+
+Rendering full video is slow. Use the cheapest check that answers your question:
+
+- **Strip layout/timing** — screenshot the VSE timeline, don't render
+- **Single frame check** — render one frame at `resolution_percentage = 25` instead of the full animation
+- **Final output** — full resolution animation
+
+Batch changes before rendering. Don't render after every strip adjustment.
 
 ## Workflow: subtitle overlay
 

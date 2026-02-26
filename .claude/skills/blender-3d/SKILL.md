@@ -5,8 +5,13 @@ description: Manipulate Blender 3D scenes including creating objects, materials,
 
 # Blender 3D — Scene Manipulation Skill
 
-Drive Blender's 3D scene via HTTP POST to `localhost:5656`.
-All code runs as Blender Python (`bpy`). Target: **Blender 5.0+**.
+Python API reference for Blender 5.0+ 3D scenes. Send all code via:
+```bash
+curl -s localhost:5656 --data-binary @- <<'PYEOF'
+<python code>
+PYEOF
+```
+See the main `blender` skill for full communication details, visual feedback, and error recovery.
 
 ## Scene basics
 
@@ -147,7 +152,9 @@ for fcurve in action.fcurves:
 ### Render still
 ```python
 scene = bpy.context.scene
-scene.render.filepath = "output/temp/render.png"
+scene.render.filepath = f"{SESSION}/render.png"
+# If previously set to FFMPEG, must reset media_type before changing format
+scene.render.image_settings.media_type = 'IMAGE'
 scene.render.image_settings.file_format = 'PNG'
 scene.render.resolution_percentage = 100
 scene.render.use_sequencer = False   # render 3D scene, not VSE
@@ -157,14 +164,14 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (image sequence)
 ```python
-scene.render.filepath = "output/temp/frame_"
+scene.render.filepath = f"{SESSION}/frame_"
 scene.render.image_settings.file_format = 'PNG'
 bpy.ops.render.render(animation=True)
 ```
 
 ### Render animation (H.264 video)
 ```python
-scene.render.filepath = "output/render.mp4"
+scene.render.filepath = f"{SESSION}/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'
@@ -180,7 +187,71 @@ bpy.ops.render.render(animation=True)
 ```python
 scene.render.engine = 'BLENDER_EEVEE'    # fast preview
 # scene.render.engine = 'CYCLES'         # high quality (slow)
-# scene.render.engine = 'BLENDER_WORKBENCH'  # solid/flat shading
+# scene.render.engine = 'BLENDER_WORKBENCH'  # solid/flat shading (fastest)
+```
+
+### Fast iteration
+
+Rendering is expensive — minimize render calls and use the cheapest method that answers your question:
+
+- **Object placement/transforms** — screenshot the viewport, don't render
+- **Composition/layout** — `resolution_percentage = 25` + `BLENDER_WORKBENCH`
+- **Materials/lighting** — `resolution_percentage = 25` + `BLENDER_EEVEE`
+- **Final output** — full resolution with the intended engine
+
+Batch multiple changes before rendering. Don't render after every tweak.
+
+## Compositor (bloom / post-processing)
+
+In Blender 5.0, bloom is NOT an EEVEE setting (`use_bloom` was removed).
+The compositor API changed completely:
+- `scene.node_tree` removed — use `scene.compositing_node_group`
+- `CompositorNodeComposite` removed — use `NodeGroupOutput` + tree interface socket
+- `scene.use_nodes` deprecated (always True) — removed in 6.0
+- Glare node: all old properties removed — everything is via input sockets
+
+### Bloom setup
+```python
+scene = bpy.context.scene
+
+# Create compositor node tree (standalone data block)
+tree = bpy.data.node_groups.new("BloomCompositor", "CompositorNodeTree")
+scene.compositing_node_group = tree
+
+# REQUIRED: create output socket on tree interface
+tree.interface.new_socket(name="Image", in_out="OUTPUT", socket_type="NodeSocketColor")
+
+# Add nodes
+rlayers = tree.nodes.new(type="CompositorNodeRLayers")
+glare = tree.nodes.new(type="CompositorNodeGlare")
+group_output = tree.nodes.new(type="NodeGroupOutput")
+
+# Configure bloom via input sockets (NOT node properties)
+glare.inputs["Type"].default_value = "Bloom"       # "Bloom", "Streaks", "Ghosts", "Fog Glow", "Simple Star", "Sun Beams"
+glare.inputs["Quality"].default_value = "High"      # "Low", "Medium", "High"
+glare.inputs["Threshold"].default_value = 0.5        # brightness cutoff
+glare.inputs["Smoothness"].default_value = 0.2       # threshold smoothness (0-1)
+glare.inputs["Size"].default_value = 0.6             # bloom radius (0-1)
+glare.inputs["Strength"].default_value = 0.8          # effect intensity (0-1)
+glare.inputs["Saturation"].default_value = 1.0        # color saturation (0-1)
+# Optional: glare.inputs["Tint"].default_value = (1, 1, 1, 1)
+
+# Link: Render Layers -> Glare -> Output
+tree.links.new(glare.inputs["Image"], rlayers.outputs["Image"])
+tree.links.new(group_output.inputs["Image"], glare.outputs["Image"])
+```
+
+### Glare node outputs
+```python
+glare.outputs["Image"]       # combined result (original + glare)
+glare.outputs["Glare"]       # glare effect only (for custom compositing)
+glare.outputs["Highlights"]  # extracted highlights only
+```
+
+### Removing compositor
+```python
+if scene.compositing_node_group:
+    bpy.data.node_groups.remove(scene.compositing_node_group)
 ```
 
 ## World / background
