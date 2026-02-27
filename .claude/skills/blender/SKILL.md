@@ -38,12 +38,18 @@ expand `$variables` or backticks inside the Python code.
 
 ## Before starting work
 
-1. Verify the server is running: `curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'`
-2. If not running, ask the user: do they want a fresh start or have a scene to open?
+**CRITICAL: NEVER launch Blender without checking first.** A second instance causes port conflicts and confusion.
+
+1. **Always check first** — this is mandatory:
+   ```bash
+   curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
+   ```
+2. If the server responds, Blender is already running — **use the existing instance**. Do NOT launch another.
+3. If not running (connection refused), ask the user: do they want a fresh start or have a scene to open?
    - Fresh: `/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &`
    - Existing file: `/Applications/Blender.app/Contents/MacOS/Blender /path/to/file.blend --python start_server.py &`
    - User has Blender open: ask them to start the server from the sidebar (N > Agent > Start)
-3. **Inspect current scene state before making changes** — never assume a clean scene.
+4. **Inspect current scene state before making changes** — never assume a clean scene.
    The user may have an existing scene they want help editing. Always run
    `bpy.data.objects.keys()` first and preserve what's there unless asked to clear it.
 

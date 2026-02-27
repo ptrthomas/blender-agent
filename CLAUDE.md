@@ -21,24 +21,36 @@ Response: `{"ok": true, "result": ..., "output": "..."}` or `{"ok": false, "erro
 
 ## Starting Blender
 
+**CRITICAL: NEVER launch Blender without checking first.** Always run the check below.
+Launching a second instance causes port conflicts, wasted resources, and confusion.
+
 ```bash
+# ALWAYS check first — this is mandatory, not optional
+curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
+```
+
+If the server responds, Blender is already running — **use the existing instance**.
+Only launch Blender if the check fails (connection refused / no response):
+
+```bash
+# Only if the check above failed:
 /Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
+sleep 5
+curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
 ```
 
-This opens Blender and auto-starts the HTTP server on port 5656.
-Splash screen is disabled via user preferences (`view.show_splash = False`).
+### Opening a file in an already-running instance
 
-### Opening an existing scene
-
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender /path/to/scene.blend --python start_server.py &
-```
-
-Or if Blender is already running with the server, open a file via code:
 ```bash
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
 bpy.ops.wm.open_mainfile(filepath="/path/to/scene.blend")
 PYEOF
+```
+
+### Opening a file at launch (only if Blender is NOT running)
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender /path/to/scene.blend --python start_server.py &
 ```
 
 If the user already has Blender open without the server, they can start it from the
@@ -48,7 +60,7 @@ If the user already has Blender open without the server, they can start it from 
 
 Before starting work, always check if Blender is already running:
 
-1. `curl -s localhost:5656` — if it responds, the server is up
+1. `curl -s localhost:5656` — if it responds, the server is up. **Do NOT launch another instance.**
 2. Inspect what's already there: `bpy.data.objects.keys()`
 3. **Never assume a clean scene.** Don't delete objects or clear data unless the user
    asks for a fresh start. The user may have an in-progress scene they want help with.
