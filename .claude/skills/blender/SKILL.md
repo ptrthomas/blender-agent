@@ -68,13 +68,19 @@ Each Blender restart creates a new session directory, so previous output is neve
 
 ## Visual feedback loop
 
+**CRITICAL: Screenshots are a TWO-STEP process. The server only returns JSON, never image data.**
+
+**NEVER** use `curl -o` to save a screenshot — the response is JSON, not an image. Saving it as PNG
+will produce a corrupt file that crashes Claude Code when read. Always use the pattern below.
+
 Screenshot the Blender UI:
 ```bash
+# Step 1: Tell Blender to save screenshot to disk
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
 bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
 PYEOF
+# Step 2: Use the Read tool on the file path to view the screenshot
 ```
-Then read the screenshot file to see the full UI state.
 
 Render a frame and inspect:
 ```bash

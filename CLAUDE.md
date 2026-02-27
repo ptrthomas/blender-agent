@@ -89,13 +89,25 @@ curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
 A `SESSION` variable is automatically injected into every code execution. It points to
 the current session's output directory (e.g. `output/2026-02-26-1430`). Use it for all output.
 
-Take a screenshot of the Blender UI and read it to see what's happening:
+**CRITICAL: Screenshots are a TWO-STEP process. The server only returns JSON, never image data.**
+
+**NEVER do this** (saves JSON as a fake PNG, crashes Claude Code session):
 ```bash
+# WRONG — localhost:5656 returns JSON, not images. -o saves garbage as PNG.
+curl -s localhost:5656/screenshot -o /tmp/screenshot.png   # BROKEN
+curl -s localhost:5656 -o /tmp/screenshot.png              # BROKEN
+```
+
+**Correct pattern:**
+```bash
+# Step 1: Tell Blender to save screenshot to a file on disk
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
 bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
 PYEOF
+# Step 2: Use the Read tool on the file path to view the screenshot
 ```
-Then use the Read tool on the screenshot path to inspect the result visually.
+The curl response is JSON (`{"ok": true, ...}`). The actual PNG is saved to disk by Blender.
+Then use the Read tool on the file path to inspect the result visually.
 
 For rendered frames (3D or VSE output), render to a file and read it:
 ```bash
