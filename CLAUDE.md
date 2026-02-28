@@ -21,73 +21,37 @@ Response: `{"ok": true, "result": ..., "output": "..."}` or `{"ok": false, "erro
 
 ## Starting Blender
 
-**CRITICAL: NEVER launch Blender without checking first.** Always run the check below.
-Launching a second instance causes port conflicts, wasted resources, and confusion.
+`start_server.py` handles everything — connecting to an existing instance or launching
+a new one. It blocks until the server is ready and returns the Blender version.
 
 ```bash
-# ALWAYS check first — this is mandatory, not optional
-curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
+python3 start_server.py                        # connect or launch
+python3 start_server.py /path/to/scene.blend   # connect or launch, opening a file
 ```
 
-If the server responds, Blender is already running — **use the existing instance**.
-Only launch Blender if the check fails (connection refused / no response):
-
-```bash
-# Only if the check above failed:
-/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
-sleep 5
-curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
-```
-
-### Opening a file in an already-running instance
-
-```bash
-curl -s localhost:5656 --data-binary @- <<'PYEOF'
-bpy.ops.wm.open_mainfile(filepath="/path/to/scene.blend")
-PYEOF
-```
-
-### Opening a file at launch (only if Blender is NOT running)
-
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender /path/to/scene.blend --python start_server.py &
-```
+If Blender is already running, it reuses the existing instance (opening the file if given).
+If not, it launches Blender and waits until the HTTP server is accepting connections.
 
 If the user already has Blender open without the server, they can start it from the
 3D Viewport sidebar (press `N` > Agent tab > Start).
 
-## Connecting to an existing scene
-
-Before starting work, always check if Blender is already running:
-
-1. `curl -s localhost:5656` — if it responds, the server is up. **Do NOT launch another instance.**
-2. Inspect what's already there: `bpy.data.objects.keys()`
-3. **Never assume a clean scene.** Don't delete objects or clear data unless the user
-   asks for a fresh start. The user may have an in-progress scene they want help with.
-
-If the server is not running, ask the user whether they want to start fresh or have
-a scene they'd like to open.
+After starting, inspect the scene before making changes — never assume a clean scene.
+The user may have work in progress. Run `bpy.data.objects.keys()` first.
 
 ## Restarting Blender
 
 ```bash
-# Graceful quit (if server is responding)
 curl -s localhost:5656 --data-binary @- <<< 'bpy.ops.wm.quit_blender()' || true
 sleep 1
-# Force kill if still running
 pkill -x Blender 2>/dev/null || true
 sleep 1
-# Relaunch
-/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
-sleep 5
-# Verify
-curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
+python3 start_server.py
 ```
 
 ## Screenshots (visual feedback)
 
-A `SESSION` variable is automatically injected into every code execution. It points to
-the current session's output directory (e.g. `output/2026-02-26-1430`). Use it for all output.
+An `OUTPUT` variable is automatically available in every code execution. It points to
+the `output/` directory. Use it for all file output.
 
 **CRITICAL: Screenshots are a TWO-STEP process. The server only returns JSON, never image data.**
 
@@ -102,7 +66,7 @@ curl -s localhost:5656 -o /tmp/screenshot.png              # BROKEN
 ```bash
 # Step 1: Tell Blender to save screenshot to a file on disk
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
-bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
+bpy.ops.screen.screenshot(filepath=f"{OUTPUT}/blender_ui.png")
 PYEOF
 # Step 2: Use the Read tool on the file path to view the screenshot
 ```
@@ -113,7 +77,7 @@ For rendered frames (3D or VSE output), render to a file and read it:
 ```bash
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
 scene = bpy.context.scene
-scene.render.filepath = f"{SESSION}/render.png"
+scene.render.filepath = f"{OUTPUT}/render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
@@ -129,20 +93,18 @@ macOS crash dumps: `~/Library/Logs/DiagnosticReports/Blender-*.ips`
 
 ## Output directory
 
-All render output goes to the gitignored `output/` directory, organized by session.
+All render output goes to the gitignored `output/` directory. The `OUTPUT` variable
+(available in all code sent to Blender) points to it. Use `f"{OUTPUT}/filename.png"`
+for all output paths. Never render to `/tmp`.
 
-Each Blender start creates a timestamped session directory: `output/YYYY-MM-DD-HHMM/`.
-The `SESSION` variable (available in all code sent to Blender) points to it. Use
-`f"{SESSION}/filename.png"` for all output paths. Previous sessions are preserved.
-
-Never render to `/tmp`. Always use `SESSION` paths.
+If output/ gets cluttered, clean it up or back it up before continuing.
 
 ## Project structure
 
 ```
 blender_agent/__init__.py    # The Blender addon (HTTP server + exec engine)
 blender_agent/blender_manifest.toml
-start_server.py              # Auto-start script for CLI launch
+start_server.py              # Launcher: connects or starts Blender, blocks until ready
 output/                      # Render output (gitignored)
 .claude/skills/              # Agent Skills (auto-loaded by Claude when relevant)
   blender/                   # General Blender automation
@@ -164,7 +126,7 @@ Target **Blender 5.0+** only. No backwards compatibility needed.
 
 The skills in `.claude/skills/` are the source of truth for Blender 5.0 API usage. Always follow the patterns in skills rather than relying on training data, which is mostly pre-5.0. When you hit an API error, fix it and update the relevant skill so it stays accurate.
 
-**Do not use auto-memory for Blender API knowledge.** All API patterns, gotchas, and learnings must go into the skill files so they ship with the project. Memory files are not distributed with the skills.
+**Do not use auto-memory at all.** Do not create or write to MEMORY.md or any files in the memory directory. All project knowledge belongs in CLAUDE.md and the skill files in `.claude/skills/`, which ship with the project.
 
 If stuck, search the web. Key docs:
 - Python API: https://docs.blender.org/api/5.0/

@@ -38,33 +38,26 @@ expand `$variables` or backticks inside the Python code.
 
 ## Before starting work
 
-**CRITICAL: NEVER launch Blender without checking first.** A second instance causes port conflicts and confusion.
+Start Blender (or connect to an already-running instance) with:
+```bash
+python3 start_server.py                        # connect or launch
+python3 start_server.py /path/to/scene.blend   # connect or launch, opening a file
+```
+This blocks until the server is ready and returns the Blender version. It never launches
+a second instance — if Blender is already running, it reuses it.
 
-1. **Always check first** — this is mandatory:
-   ```bash
-   curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
-   ```
-2. If the server responds, Blender is already running — **use the existing instance**. Do NOT launch another.
-3. If not running (connection refused), ask the user: do they want a fresh start or have a scene to open?
-   - Fresh: `/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &`
-   - Existing file: `/Applications/Blender.app/Contents/MacOS/Blender /path/to/file.blend --python start_server.py &`
-   - User has Blender open: ask them to start the server from the sidebar (N > Agent > Start)
-4. **Inspect current scene state before making changes** — never assume a clean scene.
-   The user may have an existing scene they want help editing. Always run
-   `bpy.data.objects.keys()` first and preserve what's there unless asked to clear it.
+After starting, inspect the scene before making changes — never assume a clean scene.
+The user may have work in progress. Run `bpy.data.objects.keys()` first.
 
-## Session output directory
+## Output directory
 
-A `SESSION` variable is automatically available in every code execution. It holds the
-path to the current session's output directory (e.g. `output/2026-02-26-1430`).
-Use it for all file output — screenshots, renders, exports:
+An `OUTPUT` variable is automatically available in every code execution. It points to
+the `output/` directory. Use it for all file output — screenshots, renders, exports:
 
 ```python
-f"{SESSION}/screenshot.png"
-f"{SESSION}/render.mp4"
+f"{OUTPUT}/screenshot.png"
+f"{OUTPUT}/render.mp4"
 ```
-
-Each Blender restart creates a new session directory, so previous output is never overwritten.
 
 ## Visual feedback loop
 
@@ -77,7 +70,7 @@ Screenshot the Blender UI:
 ```bash
 # Step 1: Tell Blender to save screenshot to disk
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
-bpy.ops.screen.screenshot(filepath=f"{SESSION}/blender_ui.png")
+bpy.ops.screen.screenshot(filepath=f"{OUTPUT}/blender_ui.png")
 PYEOF
 # Step 2: Use the Read tool on the file path to view the screenshot
 ```
@@ -86,7 +79,7 @@ Render a frame and inspect:
 ```bash
 curl -s localhost:5656 --data-binary @- <<'PYEOF'
 scene = bpy.context.scene
-scene.render.filepath = f"{SESSION}/render.png"
+scene.render.filepath = f"{OUTPUT}/render.png"
 scene.render.image_settings.file_format = "PNG"
 scene.render.resolution_percentage = 50
 bpy.ops.render.render(write_still=True)
@@ -120,19 +113,17 @@ obj = bpy.data.objects["Cube"]
 {"location": list(obj.location), "rotation": list(obj.rotation_euler), "scale": list(obj.scale)}
 ```
 
-### Check session path
+### Check output path
 ```bash
 curl -s localhost:5656
 ```
-Returns `{"ok": true, "session": "output/2026-02-26-1430"}`.
+Returns `{"ok": true, "output": "output/"}`.
 
 ### Error recovery
 If Blender crashes (connection refused), restart with:
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
-sleep 5
-curl -s localhost:5656 --data-binary @- <<< 'bpy.app.version_string'
+pkill -x Blender 2>/dev/null || true; sleep 1
+python3 start_server.py
 ```
-Note: restarting creates a new session directory.
 
 Check crash dumps at `~/Library/Logs/DiagnosticReports/Blender-*.ips`

@@ -23,13 +23,12 @@ The symlink means edits to the addon source are live — just restart Blender to
 
 ### 2. Start Blender with the server
 
-The easiest way is to launch from the command line, which auto-starts the HTTP server:
-
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender --python start_server.py &
+python3 start_server.py
 ```
 
-You'll see `[Blender Agent] listening on http://localhost:5656` in the terminal when it's ready.
+This launches Blender, waits until the HTTP server is ready, and prints the version.
+If Blender is already running, it connects to the existing instance.
 
 **Alternative — start manually from the UI:**
 Open the 3D Viewport sidebar (press `N`), find the **Agent** tab, and click **Start**.
@@ -68,7 +67,7 @@ Claude will send Python code to Blender, render frames, inspect the output visua
 ### Tips
 
 - **Start Blender first.** Claude can do this for you if you ask, but it's faster to have it running already.
-- **Output goes to `output/<session>/`.** Each Blender start creates a timestamped session directory (e.g. `output/2026-02-26-1430/`). A `SESSION` variable is injected into all code, so use `f"{SESSION}/render.mp4"` for output paths. Previous sessions are preserved.
+- **Output goes to `output/`.** An `OUTPUT` variable is injected into all code, so use `f"{OUTPUT}/render.mp4"` for output paths.
 - **Visual feedback.** Claude renders test frames and inspects them to iterate on aesthetics — this is normal and useful.
 
 ## Manual usage (curl)

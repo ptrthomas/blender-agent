@@ -152,7 +152,7 @@ for fcurve in action.fcurves:
 ### Render still
 ```python
 scene = bpy.context.scene
-scene.render.filepath = f"{SESSION}/render.png"
+scene.render.filepath = f"{OUTPUT}/render.png"
 # If previously set to FFMPEG, must reset media_type before changing format
 scene.render.image_settings.media_type = 'IMAGE'
 scene.render.image_settings.file_format = 'PNG'
@@ -164,14 +164,14 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (image sequence)
 ```python
-scene.render.filepath = f"{SESSION}/frame_"
+scene.render.filepath = f"{OUTPUT}/frame_"
 scene.render.image_settings.file_format = 'PNG'
 bpy.ops.render.render(animation=True)
 ```
 
 ### Render animation (H.264 video)
 ```python
-scene.render.filepath = f"{SESSION}/render.mp4"
+scene.render.filepath = f"{OUTPUT}/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'

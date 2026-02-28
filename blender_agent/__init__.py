@@ -22,13 +22,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from contextlib import redirect_stdout, redirect_stderr
 
 _server_instance = None
+_output_dir = None
 _log_file = None
-_session_dir = None
 
 
 def _exec_code(code):
     """Execute code in Blender context. Returns (result, stdout, error)."""
-    namespace = {"bpy": bpy, "__builtins__": __builtins__, "SESSION": _session_dir}
+    namespace = {"bpy": bpy, "__builtins__": __builtins__, "OUTPUT": _output_dir}
 
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
@@ -97,16 +97,14 @@ class Handler(BaseHTTPRequestHandler):
         event.wait(timeout=timeout)
 
         if not event.is_set():
-            resp = {"ok": False, "error": "timeout waiting for Blender main thread"}
-            self._log_request(code, resp)
-            self._reply(504, resp)
+            self._reply(504, {"ok": False, "error": "timeout waiting for Blender main thread"})
             return
 
         self._log_request(code, response)
         self._reply(200 if response.get("ok") else 400, response)
 
     def do_GET(self):
-        self._reply(200, {"ok": True, "session": _session_dir})
+        self._reply(200, {"ok": True, "output": _output_dir})
 
     def _reply(self, status, body):
         payload = json.dumps(body, default=repr, ensure_ascii=False).encode("utf-8")
@@ -117,21 +115,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def _log_request(self, code, response):
-        """Log request/response to file for debugging."""
-        global _log_file
         if not _log_file:
             return
         try:
             ts = datetime.datetime.now().strftime("%H:%M:%S")
-            ok = response.get("ok", False)
-            status = "OK" if ok else "ERR"
+            status = "OK" if response.get("ok") else "ERR"
             result_str = json.dumps(response, default=repr, ensure_ascii=False)
-            # Truncate long results
             if len(result_str) > 500:
                 result_str = result_str[:500] + "..."
-            entry = f"--- [{ts}] {status} ---\n>>> CODE:\n{code}\n<<< RESPONSE:\n{result_str}\n\n"
             with open(_log_file, "a") as f:
-                f.write(entry)
+                f.write(f"--- [{ts}] {status} ---\n>>> {code}\n<<< {result_str}\n\n")
         except Exception:
             pass
 
@@ -146,23 +139,14 @@ class Server:
         self.thread = None
 
     def start(self):
-        global _log_file, _session_dir
+        global _output_dir, _log_file
         self.httpd = HTTPServer(("0.0.0.0", self.port), Handler)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
-        # Read session directory from env var (set by start_server.py)
-        _session_dir = os.environ.get("BLENDER_AGENT_SESSION")
-        if _session_dir:
-            os.makedirs(_session_dir, exist_ok=True)
-            print(f"[Blender Agent] session: {_session_dir}")
-        # Enable request logging if BLENDER_AGENT_LOG env var is set
-        log_path = os.environ.get("BLENDER_AGENT_LOG")
-        if log_path:
-            _log_file = log_path
-            os.makedirs(os.path.dirname(_log_file), exist_ok=True)
-            with open(_log_file, "w") as f:
-                f.write(f"# Blender Agent request log — started {datetime.datetime.now()}\n\n")
-            print(f"[Blender Agent] logging requests to {_log_file}")
+        _output_dir = os.environ.get("BLENDER_AGENT_OUTPUT")
+        if _output_dir:
+            os.makedirs(_output_dir, exist_ok=True)
+            _log_file = os.path.join(_output_dir, "agent.log")
         print(f"[Blender Agent] listening on http://localhost:{self.port}")
 
     def stop(self):
@@ -230,6 +214,16 @@ def register():
     bpy.types.Scene.blenderagent_port = bpy.props.IntProperty(
         name="Port", default=5656, min=1024, max=65535
     )
+    # Auto-start server when launched by start_server.py (env var set)
+    if os.environ.get("BLENDER_AGENT_OUTPUT"):
+        def _auto_start():
+            try:
+                bpy.ops.blenderagent.start()
+                print("[Blender Agent] auto-started")
+            except Exception as e:
+                print(f"[Blender Agent] auto-start failed: {e}")
+            return None
+        bpy.app.timers.register(_auto_start, first_interval=1.0)
 
 
 def unregister():

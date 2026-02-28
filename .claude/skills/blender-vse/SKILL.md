@@ -223,7 +223,7 @@ se.channels[1].lock = False
 
 ### Render single frame (PNG)
 ```python
-scene.render.filepath = f"{SESSION}/frame.png"
+scene.render.filepath = f"{OUTPUT}/frame.png"
 # If previously set to FFMPEG, must reset media_type before changing format
 scene.render.image_settings.media_type = 'IMAGE'
 scene.render.image_settings.file_format = 'PNG'
@@ -234,7 +234,7 @@ bpy.ops.render.render(write_still=True)
 
 ### Render animation (video)
 ```python
-scene.render.filepath = f"{SESSION}/render.mp4"
+scene.render.filepath = f"{OUTPUT}/render.mp4"
 # Blender 5.0: MUST set media_type to VIDEO before setting FFMPEG
 scene.render.image_settings.media_type = 'VIDEO'
 scene.render.image_settings.file_format = 'FFMPEG'
