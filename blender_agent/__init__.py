@@ -26,12 +26,38 @@ _output_dir = None
 _log_file = None
 
 
+class _TeeWriter:
+    """Write to a StringIO buffer AND a file simultaneously for live logging."""
+
+    def __init__(self, buf, log_path, prefix=""):
+        self.buf = buf
+        self.log_path = log_path
+        self.prefix = prefix
+
+    def write(self, s):
+        self.buf.write(s)
+        if self.log_path and s:
+            try:
+                with open(self.log_path, "a") as f:
+                    f.write(s)
+                    f.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        self.buf.flush()
+
+
 def _exec_code(code):
     """Execute code in Blender context. Returns (result, stdout, error)."""
     namespace = {"bpy": bpy, "__builtins__": __builtins__, "OUTPUT": _output_dir}
 
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
+
+    # Tee writers stream to log file in real-time (visible via tail -f)
+    stdout_tee = _TeeWriter(stdout_buf, _log_file)
+    stderr_tee = _TeeWriter(stderr_buf, _log_file)
 
     # Try to split off the last expression so we can return its value.
     # e.g. "x = 1\nx + 2" -> exec "x = 1", then eval "x + 2" -> 3
@@ -46,7 +72,7 @@ def _exec_code(code):
         pass  # let exec() raise it with a proper message
 
     try:
-        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+        with redirect_stdout(stdout_tee), redirect_stderr(stderr_tee):
             exec(compile(tree, "<http>", "exec") if last_expr else code, namespace)
             result = eval(compile(last_expr, "<http>", "eval"), namespace) if last_expr else None
     except Exception as e:
@@ -74,6 +100,16 @@ class Handler(BaseHTTPRequestHandler):
         if not code.strip():
             self._reply(400, {"ok": False, "error": "empty body"})
             return
+
+        # Log request start (visible in tail -f before execution completes)
+        if _log_file:
+            try:
+                ts = datetime.datetime.now().strftime("%H:%M:%S")
+                snippet = code[:200].replace("\n", "\\n")
+                with open(_log_file, "a") as f:
+                    f.write(f"--- [{ts}] EXEC ---\n>>> {snippet}\n")
+            except Exception:
+                pass
 
         # We need to run in Blender's main thread.
         # Use an Event to block this HTTP thread until execution is done.
@@ -124,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(result_str) > 500:
                 result_str = result_str[:500] + "..."
             with open(_log_file, "a") as f:
-                f.write(f"--- [{ts}] {status} ---\n>>> {code}\n<<< {result_str}\n\n")
+                f.write(f"\n--- [{ts}] {status} ---\n>>> {code[:200]}\n<<< {result_str}\n\n")
         except Exception:
             pass
 

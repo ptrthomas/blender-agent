@@ -87,6 +87,12 @@ Then read the rendered image.
 
 Use this feedback loop when iterating: make changes, screenshot/render, inspect, adjust.
 
+## Logging
+
+All `print()` and Python `logging` output from executed code streams to `output/agent.log`
+in real-time — even while a request is still running. Use `tail -f output/agent.log` to
+debug long-running or hung operations. See the main blender skill for details.
+
 ## Crash reports
 
 macOS crash dumps: `~/Library/Logs/DiagnosticReports/Blender-*.ips`

@@ -127,3 +127,28 @@ python3 start_server.py
 ```
 
 Check crash dumps at `~/Library/Logs/DiagnosticReports/Blender-*.ips`
+
+## Logging and debugging
+
+All execution output (print statements AND Python logging to stderr) streams to
+`output/agent.log` **in real-time** — even while a request is still running. This
+is critical for debugging long-running or hung operations.
+
+### Watching live output
+```bash
+tail -f output/agent.log
+```
+This shows:
+- `EXEC` line when a request starts (with code snippet)
+- Live `print()` and `logging` output as the code runs
+- `OK`/`ERR` summary when the request completes
+
+### Debugging hangs
+If a curl request to Blender hasn't returned:
+1. `tail` the log to see where it's stuck
+2. If Blender is frozen: `pkill -9 -x Blender` to force-kill, then restart
+
+### Adding debug output from addon code
+Python `logging` (stderr) is captured alongside `print()` (stdout). Both stream
+to the log file in real-time. Use `print()` for progress in scripts sent via HTTP,
+and `logging.getLogger("your_module").info()` inside addon code.
