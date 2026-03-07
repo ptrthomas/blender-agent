@@ -117,6 +117,7 @@ output/                      # Render output (gitignored)
   blender-3d/                # 3D scenes, materials, animation, rendering
   blender-vse/               # Video Sequence Editor
   blender-geometry-nodes/    # Geometry Nodes (procedural geometry, instancing)
+  blender-laser/             # Laser beams with raycast reflection
 ```
 
 ## Reference code

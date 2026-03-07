@@ -97,6 +97,10 @@ Rendering is slow. Minimize render calls and use the lowest quality that answers
 - **Quick composition check** — `resolution_percentage = 25` and `BLENDER_WORKBENCH` engine
 - **Lighting/materials check** — `resolution_percentage = 25` with EEVEE
 - **Final output** — full resolution, intended engine
+- **Hard-to-validate visuals** — ask the user to check the viewport directly. They can
+  see real-time rendered view, selection highlights, and interactive feedback that
+  screenshots and renders may miss. This is especially useful for geometry nodes output,
+  volumetrics, and complex material effects.
 
 Only increase quality once the scene is right. Don't render after every small change — batch adjustments and render once to verify.
 

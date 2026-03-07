@@ -174,10 +174,36 @@ for out in grid.outputs:
 |------|-------------|------------|
 | Curve Line | `GeometryNodeCurvePrimitiveLine` | Start, End |
 | Curve Circle | `GeometryNodeCurvePrimitiveCircle` | Resolution, Radius |
-| Curve to Mesh | `GeometryNodeCurveToMesh` | Curve, Profile Curve |
+| Curve to Mesh | `GeometryNodeCurveToMesh` | Curve, Profile Curve, Fill Caps |
 | Resample Curve | `GeometryNodeResampleCurve` | Curve, Count |
 | Set Curve Radius | `GeometryNodeSetCurveRadius` | Curve, Radius |
 | Fillet Curve | `GeometryNodeFilletCurve` | Curve, Radius, Count |
+| Mesh to Curve | `GeometryNodeMeshToCurve` | Mesh, Selection |
+| Endpoint Selection | `GeometryNodeCurveEndpointSelection` | Start Size, End Size |
+| Split Edges | `GeometryNodeSplitEdges` | Mesh, Selection |
+
+### Sampling and raycasting
+
+| Node | Type string | Key inputs |
+|------|-------------|------------|
+| Raycast | `GeometryNodeRaycast` | Target Geometry, Source Position (implicit), Ray Direction, Ray Length → Is Hit, Hit Position, Hit Normal, Hit Distance |
+| Extrude Mesh | `GeometryNodeExtrudeMesh` | `mode`: FACES, EDGES, VERTICES. Selection, Offset, Offset Scale |
+
+### Attributes
+
+| Node | Type string | Key details |
+|------|-------------|-------------|
+| Named Attribute | `GeometryNodeInputNamedAttribute` | `data_type`: FLOAT, BOOLEAN, FLOAT_VECTOR. Reads stored attributes as fields |
+| Capture Attribute | `GeometryNodeCaptureAttribute` | `capture_items.new('VECTOR', "Name")`. Snapshots a field value. Types: FLOAT, INT, BOOLEAN, VECTOR, RGBA, ROTATION, MATRIX |
+
+### Object and transform
+
+| Node | Type string | Key details |
+|------|-------------|-------------|
+| Self Object | `GeometryNodeSelfObject` | Returns the modifier's own object |
+| Transform Geometry | `GeometryNodeTransform` | `inputs["Mode"].default_value = "Matrix"` for matrix input; "Components" for Translation/Rotation/Scale |
+| Invert Matrix | `FunctionNodeInvertMatrix` | Matrix → inverted Matrix |
+| Matrix Multiply | `FunctionNodeMatrixMultiply` | Matrix × Matrix |
 
 ## Example: grid with instanced cubes
 
@@ -505,6 +531,34 @@ drv.driver.expression = "hihat * 10"
 - **`resolution_percentage = 25`** + `BLENDER_EEVEE` for quick visual checks
 - **Batch changes**, then render once — don't render after every tweak
 - See `blender-3d` skill for full rendering and materials reference
+
+## CollectionInfo gotchas
+
+**Reset Children must be False** when you need object transforms preserved:
+```python
+col_info = tree.nodes.new("GeometryNodeCollectionInfo")
+col_info.inputs["Separate Children"].default_value = True
+col_info.inputs["Reset Children"].default_value = False  # True strips transforms!
+```
+`Reset Children = True` strips each child object's position, rotation, and scale.
+The geometry collapses to local-space-at-origin. Use `False` + `Realize Instances`
+to get properly transformed world-space geometry.
+
+**CollectionInfo outputs world-space geometry** after Realize Instances. If your
+modifier object is not at the origin, transform the collection geometry into the
+modifier's local space:
+```python
+self_obj = tree.nodes.new("GeometryNodeSelfObject")
+obj_info = tree.nodes.new("GeometryNodeObjectInfo")
+obj_info.transform_space = 'ORIGINAL'
+tree.links.new(obj_info.inputs["Object"], self_obj.outputs["Self Object"])
+invert = tree.nodes.new("FunctionNodeInvertMatrix")
+tree.links.new(invert.inputs["Matrix"], obj_info.outputs["Transform"])
+transform = tree.nodes.new("GeometryNodeTransform")
+transform.inputs["Mode"].default_value = "Matrix"
+tree.links.new(transform.inputs["Geometry"], realize.outputs["Geometry"])
+tree.links.new(transform.inputs["Transform"], invert.outputs["Matrix"])
+```
 
 ## Known issues (Blender 5.0.1)
 
