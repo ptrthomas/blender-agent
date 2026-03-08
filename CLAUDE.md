@@ -176,3 +176,6 @@ skills are accurate, complete, and usable by an agent without prior knowledge.
 
 - **Strip modifiers crash**: `strip.modifiers.new()` segfaults. Avoid until fixed.
 - **Render can crash**: threading segfault in `libIlmThread`. Use `resolution_percentage = 50` for test renders.
+- **Never call `depsgraph.update()` in frame handlers**: Causes crashes (GIL contention →
+  segfault) or severe playback stutter. For hiding objects from `ray_cast`, use
+  `hide_viewport = True` without `depsgraph.update()` — it works. See the laser skill.

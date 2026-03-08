@@ -45,13 +45,12 @@ FIX_OFFSET = 0.01     # anti-self-intersection offset along normal
 
 ### 1. Create beam objects
 
-Each laser is a mesh object with custom properties. Parent them to a pivot for animation.
+Each laser bounce is a separate mesh object with custom properties. Do NOT parent to the
+pivot — the handler writes world-space coords, parenting would double-transform them.
 
 ```python
 import bpy
 from mathutils import Vector
-
-pivot = bpy.data.objects["LaserPivot"]  # animated empty at beam origin
 
 LASER_DIRS = {
     "Laser_PosX": Vector((1, 0, 0)),
@@ -60,12 +59,19 @@ LASER_DIRS = {
     "Laser_NegY": Vector((0, -1, 0)),
 }
 
-for name, direction in LASER_DIRS.items():
-    mesh = bpy.data.meshes.new(name + "_mesh")
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    obj["beam_direction"] = list(direction)
-    obj["is_laser_beam"] = True
+MAX_BOUNCES = 2  # or read from control empty
+
+for laser_name, direction in LASER_DIRS.items():
+    for bounce in range(MAX_BOUNCES + 1):
+        seg_name = f"Seg_{laser_name}_b{bounce}"
+        mesh = bpy.data.meshes.new(seg_name + "_mesh")
+        obj = bpy.data.objects.new(seg_name, mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        obj["is_laser_segment"] = True
+        obj["laser_name"] = laser_name
+        obj["bounce_level"] = bounce
+        obj["beam_direction"] = list(direction)
+        # Assign per-bounce material and GN modifier (see sections below)
 ```
 
 ### 2. Frame handler (the laser engine)
@@ -199,50 +205,96 @@ for obj in bpy.data.objects:
         mod.node_group = ng
 ```
 
-### 4. Emission material with intensity falloff
+### 4. Per-bounce materials with alpha transparency falloff
+
+Use **alpha transparency** (not emission strength) for bounce falloff. This keeps the beam
+color consistent across all bounces — dimmer bounces look fainter, not a different color.
+
+Create one material per bounce level, all with the same emission color/strength but
+decreasing alpha:
 
 ```python
-mat = bpy.data.materials.new("LaserBeamMat")
-mat.use_nodes = True
-nodes = mat.node_tree.nodes
-links = mat.node_tree.links
-for n in list(nodes):
-    nodes.remove(n)
+for i in range(max_bounces + 1):
+    mat = bpy.data.materials.new(f"LaserMat_bounce{i}")
+    mat.use_nodes = True
+    mat.surface_render_method = 'BLENDED'  # required for alpha transparency
 
-output = nodes.new("ShaderNodeOutputMaterial")
-bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-bsdf.inputs["Base Color"].default_value = (1, 0.05, 0.02, 1)
-bsdf.inputs["Emission Color"].default_value = (1, 0.05, 0.02, 1)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    for n in list(nodes):
+        nodes.remove(n)
 
-# Read per-vertex intensity attribute
-attr = nodes.new("ShaderNodeAttribute")
-attr.attribute_type = 'GEOMETRY'
-attr.attribute_name = "intensity"
+    output = nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Base Color"].default_value = (1, 0.05, 0.02, 1)
+    bsdf.inputs["Emission Color"].default_value = (1, 0.05, 0.02, 1)
+    bsdf.inputs["Emission Strength"].default_value = 30.0  # same for all
 
-multiply = nodes.new("ShaderNodeMath")
-multiply.operation = 'MULTIPLY'
-multiply.inputs[1].default_value = 8.0  # base emission strength
+    # Alpha controls visibility falloff per bounce
+    intensity = (1.0 - bounce_loss) ** i
+    bsdf.inputs["Alpha"].default_value = intensity
 
-links.new(multiply.inputs[0], attr.outputs["Fac"])
-links.new(bsdf.inputs["Emission Strength"], multiply.outputs[0])
-links.new(output.inputs["Surface"], bsdf.outputs["BSDF"])
+    links.new(output.inputs["Surface"], bsdf.outputs["BSDF"])
 ```
 
+Each segment object gets a per-bounce GN group with `Set Material` pointing to its material
+(see section 3). The handler updates alpha values each frame from the control properties.
+
 ## Critical details
+
+### Stopping on non-reflective objects
+
+Tag reflective surfaces with a custom property `laser_reflect = True`. In the handler,
+check `hit_obj.get("laser_reflect")` after each hit. If the object is not reflective,
+add the final segment (origin → hit point) but don't reflect — just `break`.
+
+```python
+if hit:
+    segments.append((ray_origin.copy(), pos.copy()))
+    if not hit_obj.get("laser_reflect"):
+        break  # laser stops here, no reflection
+    # ... reflect and continue
+```
+
+This means any object in the scene without `laser_reflect = True` will absorb the laser.
+Useful for obstacles, characters, furniture, etc.
 
 ### Excluding beams from ray_cast
 
 `scene.ray_cast()` hits ALL visible scene geometry. The beam meshes themselves will
-block rays if visible. **Hide beam objects before raycasting, unhide after:**
+block rays if visible. **Set `hide_viewport = True` before raycasting, restore after.
+Do NOT call `depsgraph.update()`:**
 
 ```python
-for obj in beam_objs:
+# Hide beam segments (and any volume objects)
+for obj in seg_objs:
     obj.hide_viewport = True
-depsgraph.update()  # MUST update depsgraph after hiding
+
+# DO NOT call depsgraph.update() here — it causes crashes and stutter
+
 # ... ray_cast calls ...
-for obj in beam_objs:
+
+# Unhide
+for obj in seg_objs:
     obj.hide_viewport = False
+
+# Rebuild beam meshes
+for obj in seg_objs:
+    obj.data.clear_geometry()
+    obj.data.from_pydata([tuple(start), tuple(end)], [(0, 1)], [])
+    obj.data.update()
 ```
+
+The `hide_viewport` flag alone is enough — `ray_cast` respects it even without a
+depsgraph refresh. This gives smooth playback and stable renders.
+
+**WARNING — approaches that DON'T work:**
+- `hide_viewport` + `depsgraph.update()`: The `depsgraph.update()` call causes either
+  crashes (GIL contention → segfault in `libIlmThread`) or severe stutter during playback.
+  **Never call `depsgraph.update()` inside a `frame_change_post` handler.**
+- `layer_collection.exclude` toggling: Causes GC-like stutter every ~60 frames. Toggling
+  collection exclusion triggers a full view layer rebuild each frame.
+- `clear_geometry()` before raycast (no hiding): Beams may not be visible in viewport.
 
 ### Recursion guard
 
@@ -305,4 +357,77 @@ Note: Blender 5.0 removed `use_bloom`. For glow effects, use compositor glare no
   to sweep all beams together. The handler reads the pivot's world matrix each frame.
 - **When stuck on visual issues**: Ask the user to validate the scene in Blender's
   viewport — they can see things the screenshot may miss.
+
+### Wall normals (CRITICAL for reflections)
+
+`scene.ray_cast()` returns the **geometric face normal** of the hit surface. The reflection
+formula `R = D - 2(D·N)N` requires normals pointing **toward the ray origin** (i.e. inward
+for an enclosed room). If normals point outward, the beam reflects back into the same wall.
+
+**`primitive_plane_add` + rotation does NOT guarantee correct normals.** After creating room
+walls, always verify and fix normals:
+
+```python
+import bmesh
+from mathutils import Vector
+
+# Expected inward-facing normals for a box room
+expected = {
+    "Wall_PosX": (-1, 0, 0),  # at x=+half, points -X
+    "Wall_NegX": (1, 0, 0),   # at x=-half, points +X
+    "Wall_PosY": (0, -1, 0),  # at y=+half, points -Y
+    "Wall_NegY": (0, 1, 0),   # at y=-half, points +Y
+    "Ceiling":   (0, 0, -1),  # at z=top, points -Z
+    "Floor":     (0, 0, 1),   # at z=0, points +Z
+}
+
+for name, exp in expected.items():
+    obj = bpy.data.objects.get(name)
+    if not obj:
+        continue
+    mesh = obj.data
+    current = obj.matrix_world.to_3x3() @ mesh.polygons[0].normal
+    if current.dot(Vector(exp)) < 0:
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+```
+
+**Symptoms of wrong normals:** beam hits a wall, then bounce 1 hits the *same wall* at nearly
+the same point (instead of reflecting to a different wall). Debug by printing hit_obj.name
+for each bounce.
+
+### Beam parenting (DON'T parent to pivot)
+
+Do NOT parent beam objects to the LaserPivot. The handler writes **world-space** coordinates
+into the beam mesh. If the beam is parented to the pivot, Blender applies the parent
+transform on top, doubling the offset. Keep beam objects at the world origin with no parent.
+The handler reads the pivot's world matrix independently.
+
+### Per-bounce segment objects (for visible intensity falloff)
+
+A single polyline mesh with per-vertex `intensity` attribute does NOT survive the GN
+Mesh→Curve→Mesh pipeline well — the tube ends up with uniform brightness. Instead, create
+**separate mesh objects per laser per bounce level**, each with its own material:
+
+```python
+# 3 bounce levels = 3 materials with decreasing emission
+for i in range(max_bounces + 1):
+    intensity = (1.0 - bounce_loss) ** i
+    mat.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = (
+        base_emission * intensity
+    )
+```
+
+Each segment object gets a dedicated GN group with `Set Material` pointing to its bounce
+material. This gives clean, per-segment brightness control.
+
+### Backface culling for viewport debugging
+
+Enable `material.use_backface_culling = True` on room walls so you can orbit the camera
+outside the room and see through walls in Material Preview mode. Invaluable for debugging
+beam paths.
 
