@@ -118,6 +118,7 @@ output/                      # Render output (gitignored)
   blender-vse/               # Video Sequence Editor
   blender-geometry-nodes/    # Geometry Nodes (procedural geometry, instancing)
   blender-laser/             # Laser beams with raycast reflection
+  blender-projector/         # Spotlight projection patterns (grid, dots, radial, circles)
 ```
 
 ## Reference code
@@ -153,6 +154,7 @@ skills are accurate, complete, and usable by an agent without prior knowledge.
    - `blender-3d`: animated scene with materials, lighting, camera, and rendered output
    - `blender-vse`: multi-strip timeline with text, transitions, and video render
    - `blender-geometry-nodes`: procedural scene with instancing, keyframed inputs, and render
+   - `blender-projector`: multi-pattern spotlight scene with fog, animated params, and render
 
 2. **Launch a background sub-agent** (Task tool, `run_in_background: true`) with instructions to:
    - Read the relevant skill files from `.claude/skills/`
